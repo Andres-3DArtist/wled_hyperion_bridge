@@ -47,11 +47,10 @@ Relevant WLED fields:
 
 First setup:
 
-1. Create a bridge.
-2. Assign the bridge to a Home Assistant area.
-3. Add the first WLED device to the bridge.
+1. Choose the Home Assistant area for the bridge.
+2. Add the first WLED device to the bridge.
 
-Later, when you add the integration again, the flow asks whether to create another bridge or add a WLED to an existing bridge.
+Later, when you add the integration again, the flow asks whether to create another bridge or add a WLED to an existing bridge. New bridge names are generated from their selected Home Assistant area.
 
 For each WLED device, enter:
 

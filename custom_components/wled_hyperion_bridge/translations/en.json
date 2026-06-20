@@ -10,9 +10,8 @@
       },
       "bridge": {
         "title": "Create WLED Hyperion bridge",
-        "description": "Create the bridge and assign it to a Home Assistant area.",
+        "description": "Choose the Home Assistant area for this bridge. The bridge name will use the area name.",
         "data": {
-          "name": "Bridge name",
           "area_id": "Home Assistant area"
         }
       },
@@ -48,7 +47,7 @@
     },
     "abort": {
       "already_configured": "This bridge is already configured.",
-      "device_added": "The WLED device was added to {bridge}."
+      "device_added": "The WLED device was added to the bridge."
     }
   },
   "options": {
