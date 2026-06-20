@@ -12,7 +12,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_HOST, CONF_PORT, DEFAULT_NAME, DOMAIN
+from .const import DEFAULT_NAME, DOMAIN
 from .coordinator import WLEDHyperionBridgeCoordinator
 
 
@@ -29,7 +29,7 @@ async def async_setup_entry(
 class HyperionSyncSwitch(
     CoordinatorEntity[WLEDHyperionBridgeCoordinator], SwitchEntity
 ):
-    """Switch controlling WLED Hyperion realtime sync."""
+    """Switch controlling WLED Hyperion realtime sync for one zone."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "hyperion_sync"
@@ -45,20 +45,16 @@ class HyperionSyncSwitch(
         self._attr_unique_id = f"{entry.entry_id}_hyperion_sync"
         self._attr_name = "Hyperion Sync"
         self._attr_suggested_object_id = "hyperion_sync"
-        name = entry.data.get(CONF_NAME, DEFAULT_NAME)
-        host = entry.data[CONF_HOST]
-        port = entry.data[CONF_PORT]
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=name,
+            name=entry.data.get(CONF_NAME, DEFAULT_NAME),
             manufacturer="WLED",
-            model="WLED DDP realtime bridge",
-            configuration_url=f"http://{host}:{port}",
+            model="WLED DDP realtime zone bridge",
         )
 
     @property
     def is_on(self) -> bool:
-        """Return true if Hyperion sync is enabled."""
+        """Return true if Hyperion sync is enabled for the whole zone."""
         return self.coordinator.sync_enabled
 
     @property
@@ -70,9 +66,16 @@ class HyperionSyncSwitch(
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return diagnostic state attributes."""
         return {
-            "host": self._entry.data[CONF_HOST],
-            "port": self._entry.data[CONF_PORT],
-            "snapshot_saved": self.coordinator.saved_snapshot is not None,
+            "members": [
+                {
+                    "name": device["name"],
+                    "host": device["host"],
+                    "port": device["port"],
+                }
+                for device in self.coordinator.devices
+            ],
+            "member_count": len(self.coordinator.devices),
+            "snapshot_saved": bool(self.coordinator.saved_snapshots),
         }
 
     async def async_turn_on(self, **kwargs: Any) -> None:

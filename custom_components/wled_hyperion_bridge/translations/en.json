@@ -3,11 +3,25 @@
     "step": {
       "user": {
         "title": "WLED Hyperion Bridge",
-        "description": "Connect to a WLED device that receives Hyperion DDP realtime data.",
+        "description": "Create a Hyperion sync zone. One zone exposes one switch and can contain multiple WLED devices.",
+        "data": {
+          "name": "Zone name"
+        }
+      },
+      "device": {
+        "title": "Add WLED device",
+        "description": "Add a WLED device to this Hyperion sync zone.",
         "data": {
           "host": "Host",
           "port": "Port",
-          "name": "Name"
+          "name": "WLED name"
+        }
+      },
+      "more_devices": {
+        "title": "Add another WLED?",
+        "description": "This zone currently has {count} WLED device(s).",
+        "data": {
+          "add_another": "Add another WLED device"
         }
       }
     },
@@ -16,7 +30,24 @@
       "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "This WLED device is already configured."
+      "already_configured": "A zone with this exact WLED device set is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Add WLED device",
+        "description": "Add another WLED device to this Hyperion sync zone.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "name": "WLED name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to WLED.",
+      "unknown": "Unexpected error."
     }
   },
   "entity": {

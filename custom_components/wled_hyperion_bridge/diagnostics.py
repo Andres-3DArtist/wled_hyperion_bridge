@@ -21,8 +21,12 @@ async def async_get_config_entry_diagnostics(
 
     return {
         "entry": diag.async_redact_data(entry.as_dict(), TO_REDACT),
+        "devices": diag.async_redact_data(coordinator.devices, TO_REDACT),
         "last_update_success": coordinator.last_update_success,
         "sync_enabled": coordinator.sync_enabled,
-        "snapshot_saved": coordinator.saved_snapshot is not None,
-        "state_keys": sorted(coordinator.data.keys()) if coordinator.data else [],
+        "snapshot_saved": bool(coordinator.saved_snapshots),
+        "state_keys": {
+            device_id: sorted(state.keys())
+            for device_id, state in (coordinator.data or {}).items()
+        },
     }

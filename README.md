@@ -2,15 +2,17 @@
 
 Home Assistant custom integration for controlling WLED realtime DDP input used by Hyperion.
 
-The integration creates one switch per configured WLED device:
+The integration creates one switch per Hyperion sync zone:
 
 ```text
 switch.hyperion_sync
 ```
 
-When the switch is turned on, the integration saves the current WLED JSON state and allows WLED to accept realtime DDP data from Hyperion by setting WLED `lor` to `0`.
+Each zone can contain multiple WLED devices. Turning the zone switch on or off applies the same realtime/DDP control behavior to every WLED device in that zone.
 
-When the switch is turned off, the integration tells WLED to ignore realtime input by setting `lor` to `2` and `live` to `false`, then restores the saved brightness, colors, effects, palette, preset, and segments.
+When the switch is turned on, the integration saves the current WLED JSON state for every WLED in the zone and allows WLED to accept realtime DDP data from Hyperion by setting WLED `lor` to `0`.
+
+When the switch is turned off, the integration tells every WLED in the zone to ignore realtime input by setting `lor` to `2` and `live` to `false`, then restores each device's saved brightness, colors, effects, palette, preset, and segments.
 
 ## Compatibility
 
@@ -30,7 +32,7 @@ Relevant WLED fields:
 
 - `lor`: live data override. `0` disables override and allows realtime input. `2` keeps realtime override active until reboot.
 - `live`: realtime mode. Posting `false` exits realtime mode.
-- `bri`, `seg`, `ps`, and related state keys are captured and restored.
+- `bri`, `seg`, `ps`, and related state keys are captured and restored per WLED device.
 
 ## Installation With HACS
 
@@ -43,13 +45,19 @@ Relevant WLED fields:
 
 ## Configuration
 
+Create one integration entry per Hyperion zone. During setup:
+
+1. Enter a zone name.
+2. Add the first WLED device for that zone.
+3. Choose whether to add more WLED devices.
+
 For each WLED device, enter:
 
 - Host or IP address
 - HTTP port, usually `80`
 - Optional display name
 
-Each configured WLED device creates one `hyperion_sync` switch.
+To add another WLED later, open the integration entry's **Options** flow and add the device. Home Assistant will reload the bridge zone and keep one switch for that zone.
 
 ## Development
 
