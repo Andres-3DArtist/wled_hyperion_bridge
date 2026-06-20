@@ -1,0 +1,16 @@
+{
+  "domain": "wled_hyperion_bridge",
+  "name": "WLED Hyperion Bridge",
+  "after_dependencies": [],
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/custom-components/wled_hyperion_bridge",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/custom-components/wled_hyperion_bridge/issues",
+  "requirements": [
+    "aiohttp>=3.9.0"
+  ],
+  "version": "1.0.0"
+}

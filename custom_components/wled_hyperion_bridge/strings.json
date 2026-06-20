@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "WLED Hyperion Bridge",
+        "description": "Connect to a WLED device that receives Hyperion DDP realtime data.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to WLED.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This WLED device is already configured."
+    }
+  },
+  "entity": {
+    "switch": {
+      "hyperion_sync": {
+        "name": "Hyperion Sync"
+      }
+    }
+  }
+}
