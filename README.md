@@ -2,17 +2,17 @@
 
 Home Assistant custom integration for controlling WLED realtime DDP input used by Hyperion.
 
-The integration creates one switch per Hyperion sync zone:
+The integration creates one bridge per Home Assistant area/zone. Each bridge exposes one switch:
 
 ```text
 switch.hyperion_sync
 ```
 
-Each zone can contain multiple WLED devices. Turning the zone switch on or off applies the same realtime/DDP control behavior to every WLED device in that zone.
+A bridge contains a named list of WLED devices. Turning the bridge switch on or off applies the same realtime/DDP control behavior to every WLED device in that bridge.
 
-When the switch is turned on, the integration saves the current WLED JSON state for every WLED in the zone and allows WLED to accept realtime DDP data from Hyperion by setting WLED `lor` to `0`.
+When the switch is turned on, the integration saves the current WLED JSON state for every WLED in the bridge and allows WLED to accept realtime DDP data from Hyperion by setting WLED `lor` to `0`.
 
-When the switch is turned off, the integration tells every WLED in the zone to ignore realtime input by setting `lor` to `2` and `live` to `false`, then restores each device's saved brightness, colors, effects, palette, preset, and segments.
+When the switch is turned off, the integration tells every WLED in the bridge to ignore realtime input by setting `lor` to `2` and `live` to `false`, then restores each device's saved brightness, colors, effects, palette, preset, and segments.
 
 ## Compatibility
 
@@ -45,11 +45,13 @@ Relevant WLED fields:
 
 ## Configuration
 
-Create one integration entry per Hyperion zone. During setup:
+First setup:
 
-1. Enter a zone name.
-2. Add the first WLED device for that zone.
-3. Choose whether to add more WLED devices.
+1. Create a bridge.
+2. Assign the bridge to a Home Assistant area.
+3. Add the first WLED device to the bridge.
+
+Later, when you add the integration again, the flow adds a WLED to the existing bridge instead of creating a new bridge. If multiple bridges exist, the flow first asks which bridge should receive the new WLED.
 
 For each WLED device, enter:
 
@@ -57,7 +59,7 @@ For each WLED device, enter:
 - HTTP port, usually `80`
 - Optional display name
 
-To add another WLED later, open the integration entry's **Options** flow and add the device. Home Assistant will reload the bridge zone and keep one switch for that zone.
+The bridge switch attributes include the current `wled_devices` list with each WLED name, host, and port.
 
 ## Development
 

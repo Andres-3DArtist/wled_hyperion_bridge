@@ -1,27 +1,44 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "WLED Hyperion Bridge",
-        "description": "Create a Hyperion sync zone. One zone exposes one switch and can contain multiple WLED devices.",
+      "bridge": {
+        "title": "Create WLED Hyperion bridge",
+        "description": "Create the bridge and assign it to a Home Assistant area.",
         "data": {
-          "name": "Zone name"
+          "name": "Bridge name",
+          "area_id": "Home Assistant area"
         }
       },
-      "device": {
-        "title": "Add WLED device",
-        "description": "Add a WLED device to this Hyperion sync zone.",
+      "first_device": {
+        "title": "Add first WLED to {bridge}",
+        "description": "This bridge needs at least one WLED device.",
         "data": {
           "host": "Host",
           "port": "Port",
           "name": "WLED name"
         }
       },
-      "more_devices": {
-        "title": "Add another WLED?",
-        "description": "This zone currently has {count} WLED device(s).",
+      "select_bridge": {
+        "title": "Choose bridge",
+        "description": "Select the bridge that should receive the new WLED device.",
         "data": {
-          "add_another": "Add another WLED device"
+          "bridge": "Bridge"
+        }
+      },
+      "assign_area": {
+        "title": "Assign {bridge} to an area",
+        "description": "Choose the Home Assistant area for this bridge.",
+        "data": {
+          "area_id": "Home Assistant area"
+        }
+      },
+      "existing_device": {
+        "title": "Add WLED to {bridge}",
+        "description": "Add a WLED device to this existing bridge.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "name": "WLED name"
         }
       }
     },
@@ -30,14 +47,15 @@
       "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "A zone with this exact WLED device set is already configured."
+      "already_configured": "This bridge is already configured.",
+      "device_added": "The WLED device was added to {bridge}."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Add WLED device",
-        "description": "Add another WLED device to this Hyperion sync zone.",
+        "title": "Add WLED to {bridge}",
+        "description": "Add another WLED device to this bridge.",
         "data": {
           "host": "Host",
           "port": "Port",

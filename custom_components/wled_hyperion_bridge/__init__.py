@@ -10,6 +10,7 @@ from homeassistant.helpers.storage import Store
 
 from .api import WLEDClient
 from .const import (
+    CONF_AREA_ID,
     CONF_DEVICES,
     DEFAULT_NAME,
     PLATFORMS,
@@ -26,21 +27,25 @@ type WLEDHyperionBridgeConfigEntry = ConfigEntry[WLEDHyperionBridgeCoordinator]
 async def async_migrate_entry(
     hass: HomeAssistant, entry: WLEDHyperionBridgeConfigEntry
 ) -> bool:
-    """Migrate legacy one-WLED entries to zone entries."""
-    if entry.version >= 2 and CONF_DEVICES in entry.data:
+    """Migrate legacy entries to bridge entries."""
+    if entry.version >= 3 and CONF_DEVICES in entry.data:
         return True
 
-    devices = devices_from_data(entry.data)
+    devices = devices_from_entry(entry)
     if not devices:
-        return False
+        devices = devices_from_data(entry.data)
+
+    data = {
+        CONF_NAME: entry.data.get(CONF_NAME, entry.title or DEFAULT_NAME),
+        CONF_DEVICES: devices,
+    }
+    if CONF_AREA_ID in entry.data:
+        data[CONF_AREA_ID] = entry.data[CONF_AREA_ID]
 
     hass.config_entries.async_update_entry(
         entry,
-        data={
-            CONF_NAME: entry.data.get(CONF_NAME, entry.title or DEFAULT_NAME),
-            CONF_DEVICES: devices,
-        },
-        version=2,
+        data=data,
+        version=3,
     )
     return True
 

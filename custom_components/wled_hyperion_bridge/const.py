@@ -9,9 +9,10 @@ DOMAIN = "wled_hyperion_bridge"
 CONF_HOST = "host"
 CONF_PORT = "port"
 CONF_DEVICES = "devices"
+CONF_AREA_ID = "area_id"
 
 DEFAULT_PORT = 80
-DEFAULT_NAME = "Hyperion Zone"
+DEFAULT_NAME = "Hyperion Bridge"
 
 PLATFORMS = ("switch",)
 SCAN_INTERVAL = timedelta(seconds=30)
