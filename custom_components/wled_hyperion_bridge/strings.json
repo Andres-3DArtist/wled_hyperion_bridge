@@ -1,6 +1,13 @@
 {
   "config": {
     "step": {
+      "action": {
+        "title": "What do you want to do?",
+        "description": "Create another bridge or add a WLED device to an existing bridge.",
+        "data": {
+          "action": "Action"
+        }
+      },
       "bridge": {
         "title": "Create WLED Hyperion bridge",
         "description": "Create the bridge and assign it to a Home Assistant area.",
@@ -15,14 +22,7 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "name": "WLED name"
-        }
-      },
-      "select_bridge": {
-        "title": "Choose bridge",
-        "description": "Select the bridge that should receive the new WLED device.",
-        "data": {
-          "bridge": "Bridge"
+          "device_name": "WLED device name"
         }
       },
       "assign_area": {
@@ -38,7 +38,7 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "name": "WLED name"
+          "device_name": "WLED device name"
         }
       }
     },
@@ -59,7 +59,7 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "name": "WLED name"
+          "device_name": "WLED device name"
         }
       }
     },

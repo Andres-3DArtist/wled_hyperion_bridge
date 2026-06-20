@@ -51,15 +51,17 @@ First setup:
 2. Assign the bridge to a Home Assistant area.
 3. Add the first WLED device to the bridge.
 
-Later, when you add the integration again, the flow adds a WLED to the existing bridge instead of creating a new bridge. If multiple bridges exist, the flow first asks which bridge should receive the new WLED.
+Later, when you add the integration again, the flow asks whether to create another bridge or add a WLED to an existing bridge.
 
 For each WLED device, enter:
 
 - Host or IP address
 - HTTP port, usually `80`
-- Optional display name
+- Optional WLED device name
 
 The bridge switch attributes include the current `wled_devices` list with each WLED name, host, and port.
+
+Brand assets are included at `custom_components/wled_hyperion_bridge/brand/icon.png` for Home Assistant 2026.3+ and HACS.
 
 ## Development
 

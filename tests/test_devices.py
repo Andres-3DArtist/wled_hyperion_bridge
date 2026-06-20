@@ -2,7 +2,12 @@
 
 from homeassistant.const import CONF_NAME
 
-from custom_components.wled_hyperion_bridge.const import CONF_DEVICES, CONF_HOST, CONF_PORT
+from custom_components.wled_hyperion_bridge.const import (
+    CONF_DEVICE_NAME,
+    CONF_DEVICES,
+    CONF_HOST,
+    CONF_PORT,
+)
 from custom_components.wled_hyperion_bridge.devices import (
     devices_from_data,
     merge_device,
@@ -22,6 +27,20 @@ def test_normalize_device_adds_stable_id() -> None:
         CONF_HOST: "WLED-KITCHEN.local",
         CONF_PORT: 80,
     }
+
+
+def test_normalize_device_uses_device_name_from_flow() -> None:
+    """WLED member name is separate from the bridge name field."""
+    device = normalize_device(
+        {
+            CONF_NAME: "Bridge Name",
+            CONF_DEVICE_NAME: "TV Left",
+            CONF_HOST: "192.168.1.30",
+            CONF_PORT: 80,
+        }
+    )
+
+    assert device[CONF_NAME] == "TV Left"
 
 
 def test_devices_from_data_migrates_legacy_single_device() -> None:

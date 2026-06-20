@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME
 
-from .const import CONF_DEVICES, CONF_HOST, CONF_PORT, DEFAULT_NAME
+from .const import CONF_DEVICE_NAME, CONF_DEVICES, CONF_HOST, CONF_PORT, DEFAULT_NAME
 
 
 def target_id(host: str, port: int) -> str:
@@ -19,7 +19,7 @@ def normalize_device(data: dict[str, Any]) -> dict[str, Any]:
     """Normalize one WLED device config dict."""
     host = str(data[CONF_HOST]).strip()
     port = int(data[CONF_PORT])
-    name = str(data.get(CONF_NAME) or host).strip()
+    name = str(data.get(CONF_DEVICE_NAME) or data.get(CONF_NAME) or host).strip()
     return {
         "id": target_id(host, port),
         CONF_NAME: name,
@@ -55,9 +55,9 @@ def devices_from_data(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def devices_from_entry(entry: ConfigEntry) -> list[dict[str, Any]]:
-    """Return WLED devices from entry data plus current options."""
+    """Return WLED devices from entry data with options as a legacy fallback."""
     data = dict(entry.data)
-    if CONF_DEVICES in entry.options:
+    if CONF_DEVICES not in data and CONF_DEVICES in entry.options:
         data[CONF_DEVICES] = entry.options[CONF_DEVICES]
     return devices_from_data(data)
 

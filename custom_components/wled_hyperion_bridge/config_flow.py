@@ -15,6 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import WLEDAPIError, WLEDClient
 from .const import (
     CONF_AREA_ID,
+    CONF_DEVICE_NAME,
     CONF_DEVICES,
     CONF_HOST,
     CONF_PORT,
@@ -43,7 +44,7 @@ def _device_schema() -> vol.Schema:
         {
             vol.Required(CONF_HOST): str,
             vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
-            vol.Optional(CONF_NAME): str,
+            vol.Optional(CONF_DEVICE_NAME): str,
         }
     )
 
@@ -83,13 +84,38 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Route setup to bridge creation or existing bridge membership."""
         entries = self._async_current_entries()
         if entries:
-            if len(entries) == 1:
-                self._target_entry = entries[0]
-                if CONF_AREA_ID not in self._target_entry.data:
-                    return await self.async_step_assign_area()
-                return await self.async_step_existing_device()
-            return await self.async_step_select_bridge()
+            return await self.async_step_action()
         return await self.async_step_bridge(user_input)
+
+    async def async_step_action(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Choose whether to create a bridge or add a WLED to an existing one."""
+        entries = self._async_current_entries()
+        if user_input is not None:
+            action = str(user_input["action"])
+            if action == "create_bridge":
+                return await self.async_step_bridge()
+
+            entry_id = action.removeprefix("add_device:")
+            self._target_entry = next(
+                entry for entry in entries if entry.entry_id == entry_id
+            )
+            if CONF_AREA_ID not in self._target_entry.data:
+                return await self.async_step_assign_area()
+            return await self.async_step_existing_device()
+
+        action_options = {"create_bridge": "Create new bridge"}
+        action_options.update(
+            {
+                f"add_device:{entry.entry_id}": f"Add WLED to {entry.title}"
+                for entry in entries
+            }
+        )
+        return self.async_show_form(
+            step_id="action",
+            data_schema=vol.Schema({vol.Required("action"): vol.In(action_options)}),
+        )
 
     async def async_step_bridge(
         self, user_input: dict[str, Any] | None = None
@@ -140,26 +166,6 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"bridge": self._bridge_name},
         )
 
-    async def async_step_select_bridge(
-        self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.ConfigFlowResult:
-        """Select which existing bridge receives the new WLED."""
-        entries = self._async_current_entries()
-        if user_input is not None:
-            entry_id = str(user_input["bridge"])
-            self._target_entry = next(
-                entry for entry in entries if entry.entry_id == entry_id
-            )
-            if CONF_AREA_ID not in self._target_entry.data:
-                return await self.async_step_assign_area()
-            return await self.async_step_existing_device()
-
-        bridge_options = {entry.entry_id: entry.title for entry in entries}
-        return self.async_show_form(
-            step_id="select_bridge",
-            data_schema=vol.Schema({vol.Required("bridge"): vol.In(bridge_options)}),
-        )
-
     async def async_step_assign_area(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -200,11 +206,11 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 devices = merge_device(devices_from_entry(self._target_entry), device)
-                options = dict(self._target_entry.options)
-                options[CONF_DEVICES] = devices
+                data = dict(self._target_entry.data)
+                data[CONF_DEVICES] = devices
                 self.hass.config_entries.async_update_entry(
                     self._target_entry,
-                    options=options,
+                    data=data,
                 )
                 await self.hass.config_entries.async_reload(self._target_entry.entry_id)
                 return self.async_abort(
@@ -242,9 +248,17 @@ class WLEDHyperionBridgeOptionsFlow(config_entries.OptionsFlow):
                 errors["base"] = "unknown"
             else:
                 devices = merge_device(devices_from_entry(self.config_entry), device)
-                options = dict(self.config_entry.options)
-                options[CONF_DEVICES] = devices
-                return self.async_create_entry(title="", data=options)
+                data = dict(self.config_entry.data)
+                data[CONF_DEVICES] = devices
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data=data,
+                )
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                return self.async_create_entry(
+                    title="",
+                    data=dict(self.config_entry.options),
+                )
 
         return self.async_show_form(
             step_id="init",
