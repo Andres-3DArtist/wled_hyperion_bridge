@@ -10,6 +10,7 @@ CONF_HOST = "host"
 CONF_PORT = "port"
 CONF_DEVICES = "devices"
 CONF_AREA_ID = "area_id"
+CONF_BRIDGE_NAME = "bridge_name"
 CONF_DEVICE_NAME = "device_name"
 
 DEFAULT_PORT = 80

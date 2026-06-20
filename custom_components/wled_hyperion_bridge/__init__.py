@@ -78,7 +78,6 @@ async def async_setup_entry(
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
-    entry.async_on_unload(entry.add_update_listener(async_update_listener))
     platforms = [Platform(platform) for platform in PLATFORMS]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     return True
@@ -90,10 +89,3 @@ async def async_unload_entry(
     """Unload a config entry."""
     platforms = [Platform(platform) for platform in PLATFORMS]
     return await hass.config_entries.async_unload_platforms(entry, platforms)
-
-
-async def async_update_listener(
-    hass: HomeAssistant, entry: WLEDHyperionBridgeConfigEntry
-) -> None:
-    """Reload a config entry when bridge membership changes."""
-    await hass.config_entries.async_reload(entry.entry_id)

@@ -9,12 +9,13 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import area_registry as ar, selector
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import WLEDAPIError, WLEDClient
 from .const import (
     CONF_AREA_ID,
+    CONF_BRIDGE_NAME,
     CONF_DEVICE_NAME,
     CONF_DEVICES,
     CONF_HOST,
@@ -53,6 +54,7 @@ def _bridge_schema() -> vol.Schema:
     """Return the bridge creation form schema."""
     return vol.Schema(
         {
+            vol.Required(CONF_BRIDGE_NAME, default=DEFAULT_NAME): str,
             vol.Required(CONF_AREA_ID): selector.AreaSelector(),
         }
     )
@@ -121,8 +123,10 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Create the bridge and assign it to a Home Assistant area."""
         if user_input is not None:
+            self._bridge_name = str(
+                user_input.get(CONF_BRIDGE_NAME) or DEFAULT_NAME
+            ).strip()
             self._area_id = str(user_input[CONF_AREA_ID])
-            self._bridge_name = _bridge_name_from_area(self.hass, self._area_id)
             return await self.async_step_first_device()
 
         return self.async_show_form(
@@ -205,11 +209,10 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 devices = merge_device(devices_from_entry(self._target_entry), device)
-                return self.async_update_reload_and_abort(
-                    self._target_entry,
-                    data_updates={CONF_DEVICES: devices},
-                    reason="wled_device_added",
+                _update_bridge_devices_and_schedule_reload(
+                    self.hass, self._target_entry, devices
                 )
+                return self.async_abort(reason="wled_device_added")
 
         return self.async_show_form(
             step_id="existing_device",
@@ -241,18 +244,12 @@ class WLEDHyperionBridgeOptionsFlow(config_entries.OptionsFlow):
                 errors["base"] = "unknown"
             else:
                 devices = merge_device(devices_from_entry(self.config_entry), device)
-                data = dict(self.config_entry.data)
-                data[CONF_DEVICES] = devices
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data=data,
-                )
-                self.hass.async_create_task(
-                    self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                _update_bridge_devices_and_schedule_reload(
+                    self.hass, self.config_entry, devices
                 )
                 return self.async_create_entry(
                     title="",
-                    data=dict(self.config_entry.options),
+                    data={},
                 )
 
         return self.async_show_form(
@@ -263,9 +260,13 @@ class WLEDHyperionBridgeOptionsFlow(config_entries.OptionsFlow):
         )
 
 
-def _bridge_name_from_area(hass: HomeAssistant, area_id: str) -> str:
-    """Build a bridge name from the selected Home Assistant area."""
-    area = ar.async_get(hass).async_get_area(area_id)
-    if area is None:
-        return DEFAULT_NAME
-    return f"{area.name} Hyperion Bridge"
+def _update_bridge_devices_and_schedule_reload(
+    hass: HomeAssistant,
+    entry: config_entries.ConfigEntry,
+    devices: list[dict[str, Any]],
+) -> None:
+    """Persist bridge WLED membership and schedule a bridge reload."""
+    data = dict(entry.data)
+    data[CONF_DEVICES] = devices
+    hass.config_entries.async_update_entry(entry, data=data)
+    hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
