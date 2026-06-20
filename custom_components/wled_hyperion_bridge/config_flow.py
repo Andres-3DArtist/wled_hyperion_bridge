@@ -208,7 +208,7 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_update_reload_and_abort(
                     self._target_entry,
                     data_updates={CONF_DEVICES: devices},
-                    reason="device_added",
+                    reason="wled_device_added",
                 )
 
         return self.async_show_form(

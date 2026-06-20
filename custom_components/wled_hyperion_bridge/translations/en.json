@@ -47,7 +47,7 @@
     },
     "abort": {
       "already_configured": "This bridge is already configured.",
-      "device_added": "The WLED device was added to the bridge."
+      "wled_device_added": "The WLED device was added to the bridge."
     }
   },
   "options": {
