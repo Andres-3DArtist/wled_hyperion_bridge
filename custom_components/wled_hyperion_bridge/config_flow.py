@@ -21,11 +21,20 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_DEVICES,
     CONF_HOST,
+    CONF_HYPERION,
+    CONF_HYPERION_ALL_INSTANCES,
+    CONF_HYPERION_HOST,
+    CONF_HYPERION_INSTANCE,
+    CONF_HYPERION_PORT,
+    CONF_HYPERION_TOKEN,
     CONF_PORT,
     CONF_REMOVE_IDS,
+    DEFAULT_HYPERION_INSTANCE,
+    DEFAULT_HYPERION_PORT,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DOMAIN,
+    MAX_HYPERION_INSTANCE,
 )
 from .devices import (
     devices_from_entry,
@@ -34,6 +43,14 @@ from .devices import (
     remove_devices,
     validate_host,
     validate_port,
+)
+from .hyperion import (
+    HyperionAPIError,
+    HyperionAuthError,
+    HyperionClient,
+    HyperionConnectionError,
+    HyperionInstanceError,
+    normalize_hyperion_config,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,6 +108,59 @@ def _bridge_schema() -> vol.Schema:
     )
 
 
+def _hyperion_schema(current: dict[str, Any] | None = None) -> vol.Schema:
+    """Return the optional Hyperion output control form schema."""
+    current = current or {}
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_HYPERION_HOST, default=str(current.get(CONF_HYPERION_HOST) or "")
+            ): str,
+            vol.Optional(
+                CONF_HYPERION_PORT,
+                default=int(current.get(CONF_HYPERION_PORT, DEFAULT_HYPERION_PORT)),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+            vol.Optional(
+                CONF_HYPERION_TOKEN, default=str(current.get(CONF_HYPERION_TOKEN) or "")
+            ): str,
+            vol.Optional(
+                CONF_HYPERION_ALL_INSTANCES,
+                default=bool(current.get(CONF_HYPERION_ALL_INSTANCES, False)),
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_HYPERION_INSTANCE,
+                default=int(
+                    current.get(CONF_HYPERION_INSTANCE, DEFAULT_HYPERION_INSTANCE)
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=MAX_HYPERION_INSTANCE, mode="box"
+                )
+            ),
+        }
+    )
+
+
+async def validate_hyperion(
+    hass: HomeAssistant, data: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Validate optional Hyperion config with a live read-only probe.
+
+    Returns the normalized config, or None when no host was given (the
+    bridge stays WLED-only). Probing never writes to Hyperion.
+    """
+    config = normalize_hyperion_config(data)
+    if config is None:
+        return None
+    client = HyperionClient(
+        host=config[CONF_HYPERION_HOST],
+        port=config[CONF_HYPERION_PORT],
+        token=config[CONF_HYPERION_TOKEN],
+    )
+    await client.async_read_led_state(config["instances"])
+    return config
+
+
 def _bridge_unique_id(area_id: str | None, bridge_name: str) -> str:
     """Return a normalized unique id for a bridge."""
     normalized_name = " ".join(bridge_name.strip().lower().split())
@@ -107,6 +177,7 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._bridge_name = DEFAULT_NAME
         self._area_id: str | None = None
         self._devices: list[dict[str, Any]] = []
+        self._hyperion: dict[str, Any] | None = None
         self._target_entry: config_entries.ConfigEntry | None = None
 
     @staticmethod
@@ -167,7 +238,7 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input.get(CONF_BRIDGE_NAME) or DEFAULT_NAME
             ).strip() or DEFAULT_NAME
             self._area_id = str(user_input[CONF_AREA_ID])
-            return await self.async_step_first_device()
+            return await self.async_step_hyperion()
 
         return self.async_show_form(
             step_id="bridge",
@@ -197,6 +268,56 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return None, {"base": "unknown"}
         return device, {}
 
+    async def _async_try_validate_hyperion(
+        self, user_input: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, dict[str, str]]:
+        """Validate optional Hyperion config with a live read-only probe."""
+        if not str(user_input.get(CONF_HYPERION_HOST) or "").strip():
+            return None, {}
+        try:
+            config = await validate_hyperion(self.hass, user_input)
+        except ValueError as err:
+            code = str(err) or "unknown"
+            if code == "invalid_host":
+                return None, {CONF_HYPERION_HOST: "invalid_host"}
+            if code == "invalid_port":
+                return None, {CONF_HYPERION_PORT: "invalid_port"}
+            if code == "invalid_instance":
+                return None, {CONF_HYPERION_INSTANCE: "invalid_hyperion_instance"}
+            return None, {"base": "unknown"}
+        except HyperionConnectionError:
+            return None, {"base": "hyperion_cannot_connect"}
+        except HyperionAuthError:
+            return None, {"base": "hyperion_unauthorized"}
+        except HyperionInstanceError:
+            return None, {CONF_HYPERION_INSTANCE: "invalid_hyperion_instance"}
+        except HyperionAPIError:
+            _LOGGER.exception("Unexpected Hyperion error validating bridge output")
+            return None, {"base": "hyperion_error"}
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Unexpected error validating Hyperion output")
+            return None, {"base": "unknown"}
+        return config, {}
+
+    async def async_step_hyperion(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Optionally link the bridge to a Hyperion instance output."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            config, errors = await self._async_try_validate_hyperion(user_input)
+            if not errors:
+                self._hyperion = config
+                return await self.async_step_first_device()
+
+        return self.async_show_form(
+            step_id="hyperion",
+            data_schema=_hyperion_schema(),
+            errors=errors,
+            description_placeholders={"bridge": self._bridge_name},
+        )
+
     async def async_step_first_device(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -211,13 +332,16 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _bridge_unique_id(self._area_id, self._bridge_name)
                 )
                 self._abort_if_unique_id_configured()
+                data = {
+                    CONF_NAME: self._bridge_name,
+                    CONF_AREA_ID: self._area_id,
+                    CONF_DEVICES: self._devices,
+                }
+                if self._hyperion is not None:
+                    data[CONF_HYPERION] = self._hyperion
                 return self.async_create_entry(
                     title=self._bridge_name,
-                    data={
-                        CONF_NAME: self._bridge_name,
-                        CONF_AREA_ID: self._area_id,
-                        CONF_DEVICES: self._devices,
-                    },
+                    data=data,
                 )
 
         return self.async_show_form(
@@ -288,6 +412,8 @@ class WLEDHyperionBridgeOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             if user_input[CONF_ACTION] == "remove_device":
                 return await self.async_step_remove_device()
+            if user_input[CONF_ACTION] == "hyperion":
+                return await self.async_step_hyperion()
             return await self.async_step_add_device()
 
         return self.async_show_form(
@@ -298,10 +424,63 @@ class WLEDHyperionBridgeOptionsFlow(config_entries.OptionsFlow):
                         {
                             "add_device": "Add a WLED device",
                             "remove_device": "Remove WLED devices",
+                            "hyperion": "Hyperion output control",
                         }
                     )
                 }
             ),
+            description_placeholders={"bridge": self.config_entry.title},
+        )
+
+    async def async_step_hyperion(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Set, update or remove the Hyperion output control."""
+        errors: dict[str, str] = {}
+        current = self.config_entry.data.get(CONF_HYPERION)
+        if not isinstance(current, dict):
+            current = None
+
+        if user_input is not None:
+            if not str(user_input.get(CONF_HYPERION_HOST) or "").strip():
+                _update_bridge_hyperion_and_schedule_reload(
+                    self.hass, self.config_entry, None
+                )
+                return self.async_create_entry(title="", data={})
+            try:
+                config = await validate_hyperion(self.hass, user_input)
+            except ValueError as err:
+                code = str(err) or "unknown"
+                if code == "invalid_host":
+                    errors[CONF_HYPERION_HOST] = "invalid_host"
+                elif code == "invalid_port":
+                    errors[CONF_HYPERION_PORT] = "invalid_port"
+                elif code == "invalid_instance":
+                    errors[CONF_HYPERION_INSTANCE] = "invalid_hyperion_instance"
+                else:
+                    errors["base"] = "unknown"
+            except HyperionConnectionError:
+                errors["base"] = "hyperion_cannot_connect"
+            except HyperionAuthError:
+                errors["base"] = "hyperion_unauthorized"
+            except HyperionInstanceError:
+                errors[CONF_HYPERION_INSTANCE] = "invalid_hyperion_instance"
+            except HyperionAPIError:
+                _LOGGER.exception("Unexpected Hyperion error updating bridge output")
+                errors["base"] = "hyperion_error"
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Unexpected error updating Hyperion output")
+                errors["base"] = "unknown"
+            else:
+                _update_bridge_hyperion_and_schedule_reload(
+                    self.hass, self.config_entry, config
+                )
+                return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="hyperion",
+            data_schema=_hyperion_schema(current),
+            errors=errors,
             description_placeholders={"bridge": self.config_entry.title},
         )
 
@@ -413,5 +592,20 @@ def _update_bridge_devices_and_schedule_reload(
     """Persist bridge WLED membership and schedule a bridge reload."""
     data = dict(entry.data)
     data[CONF_DEVICES] = devices
+    hass.config_entries.async_update_entry(entry, data=data)
+    hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
+
+
+def _update_bridge_hyperion_and_schedule_reload(
+    hass: HomeAssistant,
+    entry: config_entries.ConfigEntry,
+    hyperion: dict[str, Any] | None,
+) -> None:
+    """Persist bridge Hyperion output control and schedule a reload."""
+    data = dict(entry.data)
+    if hyperion is None:
+        data.pop(CONF_HYPERION, None)
+    else:
+        data[CONF_HYPERION] = hyperion
     hass.config_entries.async_update_entry(entry, data=data)
     hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))

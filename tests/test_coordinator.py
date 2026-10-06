@@ -52,6 +52,38 @@ class FakeStore:
         self.data = None
 
 
+class FakeHyperion:
+    """Minimal Hyperion client double."""
+
+    def __init__(
+        self,
+        led: dict[int, bool] | None = None,
+        error: Exception | None = None,
+    ):
+        """Configure LEDDEVICE state or a failure to raise."""
+        self.led = dict(led if led is not None else {0: True})
+        self.error = error
+        self.ensure_calls: list[list[int]] = []
+        self.read_calls: list[list[int]] = []
+
+    async def async_read_led_state(self, instances: list[int]) -> dict[int, bool]:
+        self.read_calls.append(list(instances))
+        if self.error is not None:
+            raise self.error
+        targets = instances or sorted(self.led)
+        return {idx: self.led[idx] for idx in targets}
+
+    async def async_ensure_led_enabled(self, instances: list[int]) -> list[int]:
+        self.ensure_calls.append(list(instances))
+        if self.error is not None:
+            raise self.error
+        targets = instances or sorted(self.led)
+        changed = [idx for idx in targets if not self.led.get(idx, False)]
+        for idx in changed:
+            self.led[idx] = True
+        return changed
+
+
 def _devices() -> list[dict[str, Any]]:
     return [
         {"id": "a:80", "name": "A", "host": "a", "port": 80},
@@ -59,7 +91,7 @@ def _devices() -> list[dict[str, Any]]:
     ]
 
 
-def _coordinator(clients, store=None, devices=None):
+def _coordinator(clients, store=None, devices=None, hyperion=None, hyperion_config=None):
     return WLEDHyperionBridgeCoordinator(
         hass=object(),
         clients=clients,
@@ -67,7 +99,20 @@ def _coordinator(clients, store=None, devices=None):
         store=store if store is not None else FakeStore(),
         name="Test",
         update_interval=None,
+        hyperion=hyperion,
+        hyperion_config=hyperion_config,
     )
+
+
+def _hyperion_config(instances=None):
+    return {
+        "host": "hyperion",
+        "port": 19444,
+        "token": None,
+        "all_instances": False,
+        "instance": 0,
+        "instances": [0] if instances is None else instances,
+    }
 
 
 async def test_enable_saves_snapshot_and_posts_lor_zero() -> None:
@@ -201,3 +246,71 @@ async def test_concurrent_toggle_is_serialized() -> None:
     assert clients[0].get_calls == 3
     assert coord.sync_enabled is True
     assert coord.saved_snapshots["a:80"]["bri"] == 100
+
+
+async def test_enable_ensures_hyperion_output() -> None:
+    """Bridge ON enables Hyperion LED output for its instances."""
+    clients = [FakeClient({"on": True, "bri": 100, "lor": 2})]
+    hyperion = FakeHyperion(led={0: False})
+    coord = _coordinator(
+        clients,
+        devices=[{"id": "a:80", "name": "A", "host": "a", "port": 80}],
+        hyperion=hyperion,
+        hyperion_config=_hyperion_config(),
+    )
+
+    await coord.async_set_sync_enabled(True)
+
+    assert coord.sync_enabled is True
+    assert hyperion.ensure_calls == [[0]]
+    assert hyperion.led == {0: True}
+    assert coord.hyperion_state["reachable"] is True
+    assert coord.hyperion_state["led"] == {0: True}
+
+
+async def test_enable_fails_when_hyperion_down() -> None:
+    """A dead Hyperion fails the toggle loudly instead of silent darkness."""
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.wled_hyperion_bridge.hyperion import (
+        HyperionConnectionError,
+    )
+
+    clients = [FakeClient({"on": True, "bri": 100, "lor": 2})]
+    hyperion = FakeHyperion(error=HyperionConnectionError("down"))
+    coord = _coordinator(
+        clients,
+        devices=[{"id": "a:80", "name": "A", "host": "a", "port": 80}],
+        hyperion=hyperion,
+        hyperion_config=_hyperion_config(),
+    )
+
+    with pytest.raises(HomeAssistantError, match="Hyperion"):
+        await coord.async_set_sync_enabled(True)
+
+    assert coord.sync_enabled is False
+    assert coord.hyperion_state["reachable"] is False
+
+
+async def test_poll_tracks_hyperion_but_survives_it() -> None:
+    """Hyperion poll updates state; its failure never fails the refresh."""
+    from custom_components.wled_hyperion_bridge.hyperion import (
+        HyperionConnectionError,
+    )
+
+    clients = [FakeClient({"lor": 0, "bri": 10})]
+    hyperion = FakeHyperion(led={0: True})
+    coord = _coordinator(
+        clients,
+        devices=[{"id": "a:80", "name": "A", "host": "a", "port": 80}],
+        hyperion=hyperion,
+        hyperion_config=_hyperion_config(),
+    )
+
+    await coord._async_update_data()
+    assert coord.hyperion_state["reachable"] is True
+    assert coord.hyperion_state["led"] == {0: True}
+
+    hyperion.error = HyperionConnectionError("down")
+    await coord._async_update_data()
+    assert coord.hyperion_state["reachable"] is False

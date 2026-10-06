@@ -79,6 +79,17 @@ class HyperionSyncSwitch(
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return bridge membership attributes."""
+        hyperion_attrs: dict[str, Any] | None = None
+        if self.coordinator.hyperion_config is not None:
+            config = self.coordinator.hyperion_config
+            instances = config.get("instances") or []
+            hyperion_attrs = {
+                "host": config.get("host"),
+                "port": config.get("port"),
+                "instances": instances or "all",
+                "reachable": self.coordinator.hyperion_state.get("reachable"),
+                "led_enabled": self.coordinator.hyperion_state.get("led"),
+            }
         return {
             "area_id": self._entry.data.get(CONF_AREA_ID),
             "wled_devices": [
@@ -99,6 +110,7 @@ class HyperionSyncSwitch(
                 }
                 for device_id in self.coordinator.unreachable
             ],
+            "hyperion": hyperion_attrs,
         }
 
     async def async_turn_on(self, **kwargs: Any) -> None:

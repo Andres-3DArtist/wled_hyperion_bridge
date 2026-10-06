@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -14,6 +15,7 @@ from .api import WLEDClient
 from .const import (
     CONF_AREA_ID,
     CONF_DEVICES,
+    CONF_HYPERION,
     DEFAULT_NAME,
     DOMAIN,
     PLATFORMS,
@@ -23,6 +25,9 @@ from .const import (
 )
 from .coordinator import WLEDHyperionBridgeCoordinator
 from .devices import devices_from_data, devices_from_entry
+from .hyperion import HyperionClient, normalize_hyperion_config
+
+_LOGGER = logging.getLogger(__name__)
 
 WLEDHyperionBridgeConfigEntry = ConfigEntry[Any]
 
@@ -63,6 +68,25 @@ async def async_setup_entry(
         WLEDClient(session=session, host=device["host"], port=device["port"])
         for device in devices
     ]
+    hyperion_config: dict[str, Any] | None = None
+    hyperion_client: HyperionClient | None = None
+    raw_hyperion = entry.data.get(CONF_HYPERION)
+    if isinstance(raw_hyperion, dict) and raw_hyperion.get("host"):
+        try:
+            hyperion_config = normalize_hyperion_config(raw_hyperion)
+        except ValueError as err:
+            _LOGGER.warning(
+                "Ignoring invalid Hyperion config for bridge %s: %s",
+                entry.title,
+                err,
+            )
+            hyperion_config = None
+        if hyperion_config is not None:
+            hyperion_client = HyperionClient(
+                host=hyperion_config["host"],
+                port=hyperion_config["port"],
+                token=hyperion_config["token"],
+            )
     store: Store[dict[str, object]] = Store(
         hass,
         STORAGE_VERSION,
@@ -75,6 +99,8 @@ async def async_setup_entry(
         store=store,
         name=entry.data.get(CONF_NAME, DEFAULT_NAME),
         update_interval=SCAN_INTERVAL,
+        hyperion=hyperion_client,
+        hyperion_config=hyperion_config,
     )
 
     await coordinator.async_load_saved_snapshot()

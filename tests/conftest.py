@@ -160,6 +160,9 @@ def _install() -> None:
     selector_mod.SelectSelector = _Base
     selector_mod.SelectSelectorConfig = _Base
     selector_mod.SelectOptionDict = _Base
+    selector_mod.BooleanSelector = _Base
+    selector_mod.NumberSelector = _Base
+    selector_mod.NumberSelectorConfig = _Base
 
     for name in (
         "homeassistant.helpers.area_registry",

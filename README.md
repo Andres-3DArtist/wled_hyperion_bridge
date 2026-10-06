@@ -63,7 +63,17 @@ For each WLED device, enter:
 
 The bridge switch attributes include the current `wled_devices` list with each WLED id, name, host, and port, plus an `unreachable` list when some devices fail to respond.
 
-Manage members later from **Settings > Devices & services > WLED Hyperion Bridge > Configure**: add a WLED device or remove existing ones (at least one device must remain).
+Manage members later from **Settings > Devices & services > WLED Hyperion Bridge > Configure**: add a WLED device, remove existing ones (at least one device must remain), or configure Hyperion output control.
+
+## Hyperion Output Control (Optional)
+
+Each bridge can be linked to one Hyperion server so that turning the switch **on** also enables the Hyperion LED output (`LEDDEVICE` component) for the bridge's instance. Turning the switch **off** never touches Hyperion: it only restores the saved WLED scene while WLED ignores realtime input (`lor: 2`).
+
+- One bridge maps to one Hyperion instance (default instance `0`), or to all instances.
+- Hyperion connection uses its TCP JSON server, default port `19444` (not the `8090` web UI port).
+- If Hyperion has API authentication enabled (Hyperion web UI > System > Network Services), paste an API token. Create one in Hyperion under Configuration > Network Services.
+- The integration reads the LED output state first and only enables it when it is off. Re-enabling an already-on output resets Hyperion's stream, so blind writes are avoided.
+- If Hyperion is linked but unreachable when turning on, the switch reports an error instead of leaving the LEDs dark silently. Live state is visible in the `hyperion` switch attribute (`reachable`, `led_enabled` per instance).
 
 Brand assets are included at `custom_components/wled_hyperion_bridge/brand/icon.png` for Home Assistant 2026.3+ and HACS.
 

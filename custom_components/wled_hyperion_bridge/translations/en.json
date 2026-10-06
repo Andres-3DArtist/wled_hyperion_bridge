@@ -25,6 +25,17 @@
           "device_name": "WLED device name"
         }
       },
+      "hyperion": {
+        "title": "Hyperion output for {bridge}",
+        "description": "Optional. Link this bridge to a Hyperion instance so turning the switch on also enables the Hyperion LED output. Leave the host empty to skip.",
+        "data": {
+          "host": "Hyperion host",
+          "port": "Hyperion JSON port",
+          "token": "API token (if required)",
+          "all_instances": "All instances",
+          "instance": "Instance"
+        }
+      },
       "assign_area": {
         "title": "Assign {bridge} to an area",
         "description": "Choose the Home Assistant area for this bridge.",
@@ -47,7 +58,11 @@
       "unknown": "Unexpected error.",
       "invalid_host": "Invalid host. Use an IP address or hostname without scheme.",
       "invalid_port": "Invalid port. Use a port between 1 and 65535.",
-      "invalid_device_name": "Invalid device name."
+      "invalid_device_name": "Invalid device name.",
+      "invalid_hyperion_instance": "Invalid instance. Use 0-254.",
+      "hyperion_cannot_connect": "Failed to connect to Hyperion. Check host and port.",
+      "hyperion_unauthorized": "Hyperion rejected the API token (or one is required).",
+      "hyperion_error": "Hyperion returned an error. Check host, instance and logs."
     },
     "abort": {
       "already_configured": "This bridge is already configured.",
@@ -58,7 +73,7 @@
     "step": {
       "init": {
         "title": "Manage {bridge}",
-        "description": "Add or remove WLED devices in this bridge.",
+        "description": "Add or remove WLED devices, or configure Hyperion output control.",
         "data": {
           "action": "Action"
         }
@@ -78,6 +93,17 @@
         "data": {
           "remove_ids": "WLED devices"
         }
+      },
+      "hyperion": {
+        "title": "Hyperion output for {bridge}",
+        "description": "Optional. Leave the host empty to remove Hyperion control (bridge stays WLED-only).",
+        "data": {
+          "host": "Hyperion host",
+          "port": "Hyperion JSON port",
+          "token": "API token (if required)",
+          "all_instances": "All instances",
+          "instance": "Instance"
+        }
       }
     },
     "error": {
@@ -86,6 +112,10 @@
       "invalid_host": "Invalid host. Use an IP address or hostname without scheme.",
       "invalid_port": "Invalid port. Use a port between 1 and 65535.",
       "invalid_device_name": "Invalid device name.",
+      "invalid_hyperion_instance": "Invalid instance. Use 0-254.",
+      "hyperion_cannot_connect": "Failed to connect to Hyperion. Check host and port.",
+      "hyperion_unauthorized": "Hyperion rejected the API token (or one is required).",
+      "hyperion_error": "Hyperion returned an error. Check host, instance and logs.",
       "no_selection": "Select at least one device to remove.",
       "keep_one_device": "A bridge needs at least one WLED device."
     }

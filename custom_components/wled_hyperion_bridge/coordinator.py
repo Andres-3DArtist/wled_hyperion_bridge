@@ -13,9 +13,11 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import WLEDClient
 from .const import (
+    CONF_HYPERION,
     LIVE_OVERRIDE_OFF,
     LIVE_OVERRIDE_UNTIL_REBOOT,
 )
+from .hyperion import HyperionAPIError, HyperionClient
 from .snapshot import build_restorable_snapshot
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +34,8 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
         store: Store[dict[str, object]],
         name: str,
         update_interval,
+        hyperion: HyperionClient | None = None,
+        hyperion_config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize coordinator."""
         super().__init__(
@@ -46,6 +50,13 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
         self.saved_snapshots: dict[str, dict[str, Any]] = {}
         self.sync_enabled = False
         self.unreachable: dict[str, str] = {}
+        self.hyperion = hyperion
+        self.hyperion_config = hyperion_config
+        self.hyperion_state: dict[str, Any] = {
+            "configured": hyperion is not None,
+            "reachable": None,
+            "led": {},
+        }
         self._sync_lock = asyncio.Lock()
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
@@ -98,7 +109,36 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
                     self.name,
                     len(off_ids),
                 )
+
+        await self._async_poll_hyperion()
         return data
+
+    def _hyperion_targets(self) -> list[int]:
+        """Return target Hyperion instances ([] means all)."""
+        if self.hyperion is None or self.hyperion_config is None:
+            return []
+        return list(self.hyperion_config.get("instances", []))
+
+    async def _async_poll_hyperion(self) -> None:
+        """Refresh Hyperion LED output state without failing the poll."""
+        if self.hyperion is None:
+            return
+        try:
+            led = await self.hyperion.async_read_led_state(self._hyperion_targets())
+        except HyperionAPIError as err:
+            _LOGGER.warning("Bridge %s: Hyperion unreachable: %s", self.name, err)
+            self.hyperion_state = {
+                "configured": True,
+                "reachable": False,
+                "led": {},
+                "error": str(err),
+            }
+            return
+        self.hyperion_state = {
+            "configured": True,
+            "reachable": True,
+            "led": led,
+        }
 
     async def async_load_saved_snapshot(self) -> None:
         """Load persisted WLED state snapshots."""
@@ -148,7 +188,31 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
             len(self.saved_snapshots),
         )
         await self._async_post_all({"lor": LIVE_OVERRIDE_OFF})
+        await self._async_ensure_hyperion_output()
         self.sync_enabled = True
+
+    async def _async_ensure_hyperion_output(self) -> None:
+        """Enable Hyperion LEDDEVICE output on targets that have it off.
+
+        Hyperion itself is left running otherwise; a bridge OFF never touches
+        it. Failures raise so the switch does not claim success while the
+        LEDs stay dark.
+        """
+        if self.hyperion is None:
+            return
+        targets = self._hyperion_targets()
+        try:
+            changed = await self.hyperion.async_ensure_led_enabled(targets)
+        except HyperionAPIError as err:
+            await self._async_poll_hyperion()
+            raise HomeAssistantError(f"Hyperion output could not be enabled: {err}") from err
+        await self._async_poll_hyperion()
+        if changed:
+            _LOGGER.debug(
+                "Bridge %s: enabled Hyperion LED output on instances %s",
+                self.name,
+                changed,
+            )
 
     async def _async_disable_sync(self) -> None:
         """Ignore realtime input and restore saved WLED state on all members."""

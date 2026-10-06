@@ -10,7 +10,7 @@ from homeassistant.helpers import diagnostics as diag
 
 from .coordinator import WLEDHyperionBridgeCoordinator
 
-TO_REDACT = {"host"}
+TO_REDACT = {"host", "token"}
 
 
 async def async_get_config_entry_diagnostics(
@@ -26,6 +26,10 @@ async def async_get_config_entry_diagnostics(
             "area_id": entry.data.get("area_id"),
         },
         "wled_devices": diag.async_redact_data(coordinator.devices, TO_REDACT),
+        "hyperion": diag.async_redact_data(
+            coordinator.hyperion_config, TO_REDACT
+        ),
+        "hyperion_state": coordinator.hyperion_state,
         "last_update_success": coordinator.last_update_success,
         "sync_enabled": coordinator.sync_enabled,
         "snapshot_saved": bool(coordinator.saved_snapshots),
