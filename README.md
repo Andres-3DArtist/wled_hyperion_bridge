@@ -1,5 +1,10 @@
 # WLED Hyperion Bridge
 
+[![GitHub release](https://img.shields.io/github/v/release/Andres-3DArtist/wled_hyperion_bridge)](https://github.com/Andres-3DArtist/wled_hyperion_bridge/releases/latest)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Tests](https://github.com/Andres-3DArtist/wled_hyperion_bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/Andres-3DArtist/wled_hyperion_bridge/actions/workflows/ci.yml)
+
 Home Assistant custom integration for controlling WLED realtime DDP input used by Hyperion.
 
 The integration creates one bridge per Home Assistant area/zone. Each bridge exposes one switch:
@@ -10,9 +15,9 @@ switch.<bridge_name>_hyperion_sync
 
 A bridge contains a named list of WLED devices. Turning the bridge switch on or off applies the same realtime/DDP control behavior to every WLED device in that bridge.
 
-When the switch is turned on, the integration saves the current WLED JSON state for every WLED in the bridge and allows WLED to accept realtime DDP data from Hyperion by setting WLED `lor` to `0`.
+When the switch is turned on, the integration saves the current WLED JSON state for every WLED in the bridge and allows WLED to accept realtime DDP data from Hyperion by setting WLED `lor` to `0`. If the bridge is linked to Hyperion, it also enables the Hyperion LED output for the bridge's instance (see below).
 
-When the switch is turned off, the integration tells every WLED in the bridge to ignore realtime input by setting `lor` to `2` and `live` to `false`, then restores each device's saved brightness, colors, effects, palette, preset, playlist (`pl`), nightlight (`nl`), and segments.
+When the switch is turned off, the integration tells every WLED in the bridge to ignore realtime input by setting `lor` to `2` and `live` to `false`, then restores each device's saved brightness, colors, effects, palette, preset, playlist (`pl`), nightlight (`nl`), and segments. Hyperion itself is never touched on switch-off.
 
 Polling is tolerant to partial failures: the bridge stays available while at least one WLED responds, and unreachable devices are listed in the `unreachable` switch attribute.
 
@@ -21,7 +26,7 @@ Polling is tolerant to partial failures: the bridge stays available while at lea
 - Home Assistant 2025.1.0+
 - WLED 0.16.x
 - ESP32 WLED devices, including Gledopto ESP32 controllers
-- Hyperion configured with WLED/DDP output
+- Hyperion configured with WLED/DDP output (optional output control needs the Hyperion JSON server)
 
 ## WLED API Behavior
 
@@ -51,7 +56,8 @@ First setup:
 
 1. Enter a custom bridge name.
 2. Choose the Home Assistant area for the bridge.
-3. Add the first WLED device to the bridge.
+3. Optionally link a Hyperion server (leave the host empty to skip).
+4. Add the first WLED device to the bridge.
 
 Later, when you add the integration again, the flow asks whether to create another bridge or add a WLED to an existing bridge.
 
@@ -84,6 +90,14 @@ Run tests:
 ```bash
 pytest
 ```
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report vulnerabilities.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Andres-3DArtist.
 
 ## Notes
 
