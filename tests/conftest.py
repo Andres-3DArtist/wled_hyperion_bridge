@@ -50,10 +50,25 @@ def _install() -> None:
             self.version: int = 3
 
     class ConfigFlow:
-        pass
+        def __init_subclass__(cls, **kwargs):
+            super().__init_subclass__()
 
     class OptionsFlow:
-        pass
+        """Mimic HA >= 2024.11: config_entry is a read-only property."""
+
+        def __init__(self, *args, **kwargs):
+            if args or kwargs:
+                raise TypeError(
+                    "OptionsFlow takes no constructor arguments; "
+                    "HA injects config_entry"
+                )
+            self._config_entry = None
+
+        @property
+        def config_entry(self):
+            if self._config_entry is None:
+                raise ValueError("config entry not available yet")
+            return self._config_entry
 
     config_entries.ConfigEntry = ConfigEntry
     config_entries.ConfigFlow = ConfigFlow
