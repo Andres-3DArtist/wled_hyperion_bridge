@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -14,17 +15,45 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import WLEDAPIError, WLEDClient
 from .const import (
+    CONF_ACTION,
     CONF_AREA_ID,
     CONF_BRIDGE_NAME,
     CONF_DEVICE_NAME,
     CONF_DEVICES,
     CONF_HOST,
     CONF_PORT,
+    CONF_REMOVE_IDS,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DOMAIN,
 )
-from .devices import devices_from_entry, merge_device, normalize_device
+from .devices import (
+    devices_from_entry,
+    merge_device,
+    normalize_device,
+    remove_devices,
+    validate_host,
+    validate_port,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _field_errors(user_input: dict[str, Any]) -> dict[str, str]:
+    """Validate host/port locally before hitting the network."""
+    errors: dict[str, str] = {}
+    try:
+        validate_host(user_input.get(CONF_HOST))
+    except ValueError:
+        errors[CONF_HOST] = "invalid_host"
+    try:
+        validate_port(user_input.get(CONF_PORT, DEFAULT_PORT))
+    except ValueError:
+        errors[CONF_PORT] = "invalid_port"
+    name = user_input.get(CONF_DEVICE_NAME)
+    if name is not None and len(str(name).strip()) > 255:
+        errors[CONF_DEVICE_NAME] = "invalid_device_name"
+    return errors
 
 
 async def validate_device(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
@@ -44,7 +73,9 @@ def _device_schema() -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_HOST): str,
-            vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
+            vol.Optional(CONF_PORT, default=DEFAULT_PORT): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=65535)
+            ),
             vol.Optional(CONF_DEVICE_NAME): str,
         }
     )
@@ -58,6 +89,12 @@ def _bridge_schema() -> vol.Schema:
             vol.Required(CONF_AREA_ID): selector.AreaSelector(),
         }
     )
+
+
+def _bridge_unique_id(area_id: str | None, bridge_name: str) -> str:
+    """Return a normalized unique id for a bridge."""
+    normalized_name = " ".join(bridge_name.strip().lower().split())
+    return f"bridge:{area_id}:{normalized_name}"
 
 
 class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -100,8 +137,11 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             entry_id = action.removeprefix("add_device:")
             self._target_entry = next(
-                entry for entry in entries if entry.entry_id == entry_id
+                (entry for entry in entries if entry.entry_id == entry_id), None
             )
+            if self._target_entry is None:
+                _LOGGER.warning("Selected bridge %s no longer exists", entry_id)
+                return await self.async_step_action()
             if CONF_AREA_ID not in self._target_entry.data:
                 return await self.async_step_assign_area()
             return await self.async_step_existing_device()
@@ -125,7 +165,7 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._bridge_name = str(
                 user_input.get(CONF_BRIDGE_NAME) or DEFAULT_NAME
-            ).strip()
+            ).strip() or DEFAULT_NAME
             self._area_id = str(user_input[CONF_AREA_ID])
             return await self.async_step_first_device()
 
@@ -134,6 +174,29 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=_bridge_schema(),
         )
 
+    async def _async_try_validate(
+        self, user_input: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, dict[str, str]]:
+        """Run local field checks then a live WLED probe."""
+        errors = _field_errors(user_input)
+        if errors:
+            return None, errors
+        try:
+            device = await validate_device(self.hass, user_input)
+        except WLEDAPIError:
+            return None, {"base": "cannot_connect"}
+        except ValueError as err:
+            code = str(err) or "unknown"
+            if code in ("invalid_host",):
+                return None, {CONF_HOST: code}
+            if code in ("invalid_port",):
+                return None, {CONF_PORT: code}
+            return None, {"base": "unknown"}
+        except Exception:  # noqa: BLE001 - surface as unknown in the form
+            _LOGGER.exception("Unexpected error validating WLED device")
+            return None, {"base": "unknown"}
+        return device, {}
+
     async def async_step_first_device(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -141,16 +204,11 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            try:
-                device = await validate_device(self.hass, user_input)
-            except WLEDAPIError:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                errors["base"] = "unknown"
-            else:
+            device, errors = await self._async_try_validate(user_input)
+            if device is not None:
                 self._devices = merge_device(self._devices, device)
                 await self.async_set_unique_id(
-                    f"bridge:{self._area_id}:{self._bridge_name.lower()}"
+                    _bridge_unique_id(self._area_id, self._bridge_name)
                 )
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
@@ -183,6 +241,9 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._target_entry,
                 data=data,
             )
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self._target_entry.entry_id)
+            )
             return await self.async_step_existing_device()
 
         return self.async_show_form(
@@ -201,13 +262,8 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         bridge_name = self._target_entry.title if self._target_entry else DEFAULT_NAME
 
         if user_input is not None and self._target_entry is not None:
-            try:
-                device = await validate_device(self.hass, user_input)
-            except WLEDAPIError:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                errors["base"] = "unknown"
-            else:
+            device, errors = await self._async_try_validate(user_input)
+            if device is not None and self._target_entry is not None:
                 devices = merge_device(devices_from_entry(self._target_entry), device)
                 _update_bridge_devices_and_schedule_reload(
                     self.hass, self._target_entry, devices
@@ -223,7 +279,7 @@ class WLEDHyperionBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class WLEDHyperionBridgeOptionsFlow(config_entries.OptionsFlow):
-    """Handle options for a WLED Hyperion Bridge."""
+    """Manage WLED members of an existing bridge."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
@@ -232,31 +288,124 @@ class WLEDHyperionBridgeOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
+        """Show the manage-devices menu."""
+        if user_input is not None:
+            if user_input[CONF_ACTION] == "remove_device":
+                return await self.async_step_remove_device()
+            return await self.async_step_add_device()
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ACTION, default="add_device"): vol.In(
+                        {
+                            "add_device": "Add a WLED device",
+                            "remove_device": "Remove WLED devices",
+                        }
+                    )
+                }
+            ),
+            description_placeholders={"bridge": self.config_entry.title},
+        )
+
+    async def async_step_add_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Add one WLED member to an existing bridge."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            try:
-                device = await validate_device(self.hass, user_input)
-            except WLEDAPIError:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                errors["base"] = "unknown"
+            field_errors = _field_errors(user_input)
+            if field_errors:
+                errors.update(field_errors)
             else:
-                devices = merge_device(devices_from_entry(self.config_entry), device)
-                _update_bridge_devices_and_schedule_reload(
-                    self.hass, self.config_entry, devices
-                )
-                return self.async_create_entry(
-                    title="",
-                    data={},
-                )
+                try:
+                    device = await validate_device(self.hass, user_input)
+                except WLEDAPIError:
+                    errors["base"] = "cannot_connect"
+                except ValueError as err:
+                    code = str(err) or "unknown"
+                    if code in ("invalid_host",):
+                        errors[CONF_HOST] = code
+                    elif code in ("invalid_port",):
+                        errors[CONF_PORT] = code
+                    else:
+                        errors["base"] = "unknown"
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception("Unexpected error validating WLED device")
+                    errors["base"] = "unknown"
+                else:
+                    devices = merge_device(
+                        devices_from_entry(self.config_entry), device
+                    )
+                    _update_bridge_devices_and_schedule_reload(
+                        self.hass, self.config_entry, devices
+                    )
+                    return self.async_create_entry(title="", data={})
 
         return self.async_show_form(
-            step_id="init",
+            step_id="add_device",
             data_schema=_device_schema(),
             errors=errors,
             description_placeholders={"bridge": self.config_entry.title},
+        )
+
+    async def async_step_remove_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Remove WLED members from the bridge."""
+        devices = devices_from_entry(self.config_entry)
+        if not devices:
+            return self.async_create_entry(title="", data={})
+
+        if user_input is not None:
+            selected = set(str(item) for item in user_input.get(CONF_REMOVE_IDS, []))
+            remaining = remove_devices(devices, selected)
+            if len(remaining) == len(devices):
+                return self.async_show_form(
+                    step_id="remove_device",
+                    data_schema=self._remove_schema(devices),
+                    errors={"base": "no_selection"},
+                    description_placeholders={"bridge": self.config_entry.title},
+                )
+            if not remaining:
+                return self.async_show_form(
+                    step_id="remove_device",
+                    data_schema=self._remove_schema(devices),
+                    errors={"base": "keep_one_device"},
+                    description_placeholders={"bridge": self.config_entry.title},
+                )
+            _update_bridge_devices_and_schedule_reload(
+                self.hass, self.config_entry, remaining
+            )
+            return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="remove_device",
+            data_schema=self._remove_schema(devices),
+            description_placeholders={"bridge": self.config_entry.title},
+        )
+
+    def _remove_schema(self, devices: list[dict[str, Any]]) -> vol.Schema:
+        """Build the multi-select schema for device removal."""
+        options = {
+            device["id"]: f"{device.get(CONF_NAME, device['id'])} "
+            f"({device.get(CONF_HOST)}:{device.get(CONF_PORT)})"
+            for device in devices
+        }
+        return vol.Schema(
+            {
+                vol.Required(CONF_REMOVE_IDS): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=key, label=label)
+                            for key, label in options.items()
+                        ],
+                        multiple=True,
+                    )
+                )
+            }
         )
 
 

@@ -12,6 +12,8 @@ CONF_DEVICES = "devices"
 CONF_AREA_ID = "area_id"
 CONF_BRIDGE_NAME = "bridge_name"
 CONF_DEVICE_NAME = "device_name"
+CONF_ACTION = "action"
+CONF_REMOVE_IDS = "remove_ids"
 
 DEFAULT_PORT = 80
 DEFAULT_NAME = "Hyperion Bridge"
@@ -30,6 +32,8 @@ RESTORABLE_STATE_KEYS = {
     "bri",
     "transition",
     "ps",
+    "pl",
+    "nl",
     "mainseg",
     "seg",
 }

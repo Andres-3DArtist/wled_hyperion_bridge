@@ -2,15 +2,13 @@
   "domain": "wled_hyperion_bridge",
   "name": "WLED Hyperion Bridge",
   "after_dependencies": [],
-  "codeowners": [],
+  "codeowners": ["@Andres-3DArtist"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/custom-components/wled_hyperion_bridge",
+  "documentation": "https://github.com/Andres-3DArtist/wled_hyperion_bridge",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/custom-components/wled_hyperion_bridge/issues",
-  "requirements": [
-    "aiohttp>=3.9.0"
-  ],
-  "version": "1.2.3"
+  "issue_tracker": "https://github.com/Andres-3DArtist/wled_hyperion_bridge/issues",
+  "requirements": [],
+  "version": "1.3.0"
 }

@@ -92,3 +92,29 @@ async def test_client_raises_on_http_error(
 
     with pytest.raises(WLEDResponseError):
         await client.async_get_state()
+
+
+def test_client_base_url_wraps_ipv6() -> None:
+    """Bare IPv6 hosts are bracketed for a valid URL."""
+    client = WLEDClient(session=None, host="::1", port=80)  # type: ignore[arg-type]
+
+    assert client.base_url == "http://[::1]:80"
+
+
+async def test_client_handles_empty_body(
+    aiohttp_server: Any, client_session: aiohttp.ClientSession
+) -> None:
+    """Empty bodies return None from POST and raise from GET."""
+
+    async def empty(request: web.Request) -> web.Response:
+        return web.Response(status=200, text="")
+
+    app = web.Application()
+    app.router.add_get("/json/state", empty)
+    app.router.add_post("/json/state", empty)
+    server = await aiohttp_server(app)
+    client = WLEDClient(session=client_session, host=server.host, port=server.port)
+
+    assert await client.async_set_state({"lor": 0}) is None
+    with pytest.raises(WLEDResponseError):
+        await client.async_get_state()

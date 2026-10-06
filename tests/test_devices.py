@@ -1,5 +1,6 @@
 """Tests for WLED bridge device helpers."""
 
+import pytest
 from homeassistant.const import CONF_NAME
 
 from custom_components.wled_hyperion_bridge.const import (
@@ -12,6 +13,7 @@ from custom_components.wled_hyperion_bridge.devices import (
     devices_from_data,
     merge_device,
     normalize_device,
+    remove_devices,
 )
 
 
@@ -84,3 +86,44 @@ def test_merge_device_replaces_existing_member() -> None:
 
     assert len(merged) == 1
     assert merged[0][CONF_NAME] == "New"
+
+
+def test_normalize_device_rejects_bad_host_and_port() -> None:
+    """Empty hosts, URLs and out-of-range ports raise ValueError."""
+    with pytest.raises(ValueError):
+        normalize_device({CONF_NAME: "x", CONF_HOST: "  ", CONF_PORT: 80})
+    with pytest.raises(ValueError):
+        normalize_device(
+            {CONF_NAME: "x", CONF_HOST: "http://192.168.1.2", CONF_PORT: 80}
+        )
+    with pytest.raises(ValueError):
+        normalize_device({CONF_NAME: "x", CONF_HOST: "192.168.1.2", CONF_PORT: 0})
+    with pytest.raises(ValueError):
+        normalize_device({CONF_NAME: "x", CONF_HOST: "192.168.1.2", CONF_PORT: 99999})
+
+
+def test_devices_from_data_skips_invalid_members() -> None:
+    """One bad member does not drop the whole bridge list."""
+    devices = devices_from_data(
+        {
+            CONF_DEVICES: [
+                {CONF_NAME: "Good", CONF_HOST: "192.168.1.21", CONF_PORT: 80},
+                {CONF_NAME: "Bad", CONF_HOST: "http://bad", CONF_PORT: 80},
+                {CONF_NAME: "NoPort", CONF_HOST: "192.168.1.23"},
+            ]
+        }
+    )
+
+    assert [device["id"] for device in devices] == ["192.168.1.21:80"]
+
+
+def test_remove_devices_filters_by_id() -> None:
+    """Removal helper drops only the selected target ids."""
+    devices = [
+        normalize_device({CONF_NAME: "A", CONF_HOST: "192.168.1.21", CONF_PORT: 80}),
+        normalize_device({CONF_NAME: "B", CONF_HOST: "192.168.1.22", CONF_PORT: 80}),
+    ]
+
+    remaining = remove_devices(devices, {"192.168.1.21:80"})
+
+    assert [device["id"] for device in remaining] == ["192.168.1.22:80"]

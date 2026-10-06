@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant
@@ -13,6 +15,7 @@ from .const import (
     CONF_AREA_ID,
     CONF_DEVICES,
     DEFAULT_NAME,
+    DOMAIN,
     PLATFORMS,
     SCAN_INTERVAL,
     STORAGE_KEY_TEMPLATE,
@@ -21,7 +24,7 @@ from .const import (
 from .coordinator import WLEDHyperionBridgeCoordinator
 from .devices import devices_from_data, devices_from_entry
 
-type WLEDHyperionBridgeConfigEntry = ConfigEntry[WLEDHyperionBridgeCoordinator]
+WLEDHyperionBridgeConfigEntry = ConfigEntry[Any]
 
 
 async def async_migrate_entry(
@@ -89,3 +92,15 @@ async def async_unload_entry(
     """Unload a config entry."""
     platforms = [Platform(platform) for platform in PLATFORMS]
     return await hass.config_entries.async_unload_platforms(entry, platforms)
+
+
+async def async_remove_config_entry(
+    hass: HomeAssistant, entry: WLEDHyperionBridgeConfigEntry
+) -> None:
+    """Remove persisted snapshots when the bridge is deleted."""
+    store: Store[dict[str, object]] = Store(
+        hass,
+        STORAGE_VERSION,
+        STORAGE_KEY_TEMPLATE.format(entry_id=entry.entry_id),
+    )
+    await store.async_remove()

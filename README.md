@@ -5,18 +5,20 @@ Home Assistant custom integration for controlling WLED realtime DDP input used b
 The integration creates one bridge per Home Assistant area/zone. Each bridge exposes one switch:
 
 ```text
-switch.hyperion_sync
+switch.<bridge_name>_hyperion_sync
 ```
 
 A bridge contains a named list of WLED devices. Turning the bridge switch on or off applies the same realtime/DDP control behavior to every WLED device in that bridge.
 
 When the switch is turned on, the integration saves the current WLED JSON state for every WLED in the bridge and allows WLED to accept realtime DDP data from Hyperion by setting WLED `lor` to `0`.
 
-When the switch is turned off, the integration tells every WLED in the bridge to ignore realtime input by setting `lor` to `2` and `live` to `false`, then restores each device's saved brightness, colors, effects, palette, preset, and segments.
+When the switch is turned off, the integration tells every WLED in the bridge to ignore realtime input by setting `lor` to `2` and `live` to `false`, then restores each device's saved brightness, colors, effects, palette, preset, playlist (`pl`), nightlight (`nl`), and segments.
+
+Polling is tolerant to partial failures: the bridge stays available while at least one WLED responds, and unreachable devices are listed in the `unreachable` switch attribute.
 
 ## Compatibility
 
-- Home Assistant 2026.6.1
+- Home Assistant 2025.1.0+
 - WLED 0.16.x
 - ESP32 WLED devices, including Gledopto ESP32 controllers
 - Hyperion configured with WLED/DDP output
@@ -32,7 +34,7 @@ Relevant WLED fields:
 
 - `lor`: live data override. `0` disables override and allows realtime input. `2` keeps realtime override active until reboot.
 - `live`: realtime mode. Posting `false` exits realtime mode.
-- `bri`, `seg`, `ps`, and related state keys are captured and restored per WLED device.
+- `bri`, `seg`, `ps`, `pl`, `nl`, and related state keys are captured and restored per WLED device.
 
 ## Installation With HACS
 
@@ -59,7 +61,9 @@ For each WLED device, enter:
 - HTTP port, usually `80`
 - Optional WLED device name
 
-The bridge switch attributes include the current `wled_devices` list with each WLED name, host, and port.
+The bridge switch attributes include the current `wled_devices` list with each WLED id, name, host, and port, plus an `unreachable` list when some devices fail to respond.
+
+Manage members later from **Settings > Devices & services > WLED Hyperion Bridge > Configure**: add a WLED device or remove existing ones (at least one device must remain).
 
 Brand assets are included at `custom_components/wled_hyperion_bridge/brand/icon.png` for Home Assistant 2026.3+ and HACS.
 

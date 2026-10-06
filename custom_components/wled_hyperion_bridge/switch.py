@@ -34,6 +34,7 @@ class HyperionSyncSwitch(
 
     _attr_has_entity_name = True
     _attr_translation_key = "hyperion_sync"
+    _attr_icon = "mdi:led-strip-variant"
 
     def __init__(
         self,
@@ -46,7 +47,6 @@ class HyperionSyncSwitch(
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_hyperion_sync"
         self._attr_name = "Hyperion Sync"
-        self._attr_suggested_object_id = "hyperion_sync"
         device_info: DeviceInfo = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": entry.data.get(CONF_NAME, DEFAULT_NAME),
@@ -83,6 +83,7 @@ class HyperionSyncSwitch(
             "area_id": self._entry.data.get(CONF_AREA_ID),
             "wled_devices": [
                 {
+                    "id": device["id"],
                     "name": device["name"],
                     "host": device["host"],
                     "port": device["port"],
@@ -91,6 +92,13 @@ class HyperionSyncSwitch(
             ],
             "wled_count": len(self.coordinator.devices),
             "snapshot_saved": bool(self.coordinator.saved_snapshots),
+            "unreachable": [
+                {
+                    "id": device_id,
+                    "error": self.coordinator.unreachable.get(device_id, ""),
+                }
+                for device_id in self.coordinator.unreachable
+            ],
         }
 
     async def async_turn_on(self, **kwargs: Any) -> None:

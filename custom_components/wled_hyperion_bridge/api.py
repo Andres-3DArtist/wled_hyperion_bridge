@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -33,7 +34,11 @@ class WLEDClient:
     @property
     def base_url(self) -> str:
         """Return the WLED HTTP base URL."""
-        return f"http://{self.host}:{self.port}"
+        host = self.host.strip()
+        # Wrap bare IPv6 literals so http://::1:80 becomes http://[::1]:80.
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"http://{host}:{int(self.port)}"
 
     async def async_get_state(self) -> dict[str, Any]:
         """Fetch WLED state from /json/state."""
@@ -66,12 +71,23 @@ class WLEDClient:
                         f"WLED returned HTTP {response.status}: {text[:160]}"
                     )
 
+                if response.status == 204:
+                    return None
+
+                # content_length is None with chunked encoding, so only
+                # short-circuit on an explicit zero.
                 if response.content_length == 0:
                     return None
 
                 try:
-                    return await response.json(content_type=None)
-                except aiohttp.ContentTypeError as err:
+                    text = await response.text()
+                except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                    raise WLEDConnectionError("Could not connect to WLED") from err
+                if not text.strip():
+                    return None
+                try:
+                    return json.loads(text)
+                except ValueError as err:
                     raise WLEDResponseError("WLED did not return JSON") from err
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise WLEDConnectionError("Could not connect to WLED") from err

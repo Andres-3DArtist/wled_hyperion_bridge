@@ -42,6 +42,22 @@ def test_build_restorable_snapshot_keeps_expected_wled_fields() -> None:
     assert "len" not in snapshot["seg"][0]
 
 
+def test_build_restorable_snapshot_keeps_playlist_and_nightlight() -> None:
+    """Playlist and nightlight are restored so modes survive sync."""
+    state = {
+        "on": True,
+        "bri": 128,
+        "pl": 2,
+        "nl": {"on": True, "dur": 60},
+        "lor": 0,
+    }
+
+    snapshot = build_restorable_snapshot(state)
+
+    assert snapshot["pl"] == 2
+    assert snapshot["nl"] == {"on": True, "dur": 60}
+
+
 def test_build_restorable_snapshot_deep_copies_state() -> None:
     """Snapshot should not mutate when source state changes later."""
     state = {

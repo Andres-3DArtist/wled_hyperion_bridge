@@ -44,7 +44,10 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to WLED.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "invalid_host": "Invalid host. Use an IP address or hostname without scheme.",
+      "invalid_port": "Invalid port. Use a port between 1 and 65535.",
+      "invalid_device_name": "Invalid device name."
     },
     "abort": {
       "already_configured": "This bridge is already configured.",
@@ -54,6 +57,13 @@
   "options": {
     "step": {
       "init": {
+        "title": "Manage {bridge}",
+        "description": "Add or remove WLED devices in this bridge.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "add_device": {
         "title": "Add WLED to {bridge}",
         "description": "Add another WLED device to this bridge.",
         "data": {
@@ -61,11 +71,23 @@
           "port": "Port",
           "device_name": "WLED device name"
         }
+      },
+      "remove_device": {
+        "title": "Remove WLED from {bridge}",
+        "description": "Select the WLED devices to remove. At least one device must remain.",
+        "data": {
+          "remove_ids": "WLED devices"
+        }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to WLED.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "invalid_host": "Invalid host. Use an IP address or hostname without scheme.",
+      "invalid_port": "Invalid port. Use a port between 1 and 65535.",
+      "invalid_device_name": "Invalid device name.",
+      "no_selection": "Select at least one device to remove.",
+      "keep_one_device": "A bridge needs at least one WLED device."
     }
   },
   "entity": {

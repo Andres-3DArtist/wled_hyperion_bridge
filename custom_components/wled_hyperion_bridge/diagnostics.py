@@ -29,6 +29,7 @@ async def async_get_config_entry_diagnostics(
         "last_update_success": coordinator.last_update_success,
         "sync_enabled": coordinator.sync_enabled,
         "snapshot_saved": bool(coordinator.saved_snapshots),
+        "unreachable": coordinator.unreachable,
         "state_keys": {
             device_id: sorted(state.keys())
             for device_id, state in (coordinator.data or {}).items()

@@ -45,6 +45,8 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
         self.store = store
         self.saved_snapshots: dict[str, dict[str, Any]] = {}
         self.sync_enabled = False
+        self.unreachable: dict[str, str] = {}
+        self._sync_lock = asyncio.Lock()
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         """Fetch current WLED state for all bridge members."""
@@ -53,20 +55,49 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
             return_exceptions=True,
         )
         data: dict[str, dict[str, Any]] = {}
-        errors: list[str] = []
+        unreachable: dict[str, str] = {}
 
         for device, result in zip(self.devices, results, strict=True):
             if isinstance(result, Exception):
-                errors.append(f"{device['name']}: {result}")
+                unreachable[device["id"]] = str(result)
                 continue
             data[device["id"]] = result
 
-        if errors:
-            raise UpdateFailed("; ".join(errors))
+        self.unreachable = unreachable
+        if unreachable:
+            _LOGGER.warning(
+                "Bridge %s: %d of %d WLED devices unreachable: %s",
+                self.name,
+                len(unreachable),
+                len(self.devices),
+                "; ".join(
+                    f"{device['name']}: {unreachable[device['id']]}"
+                    for device in self.devices
+                    if device["id"] in unreachable
+                ),
+            )
 
-        self.sync_enabled = bool(data) and all(
-            state.get("lor") == LIVE_OVERRIDE_OFF for state in data.values()
-        )
+        # Only fail the refresh when *all* members are down so one bad
+        # device does not take the whole bridge offline.
+        if not data:
+            raise UpdateFailed("; ".join(unreachable.values()) or "no WLED data")
+
+        # NOTE: sync state is owned by our snapshots, not by `lor`. A fresh
+        # WLED reports lor=0 (realtime allowed), so deriving sync from `lor`
+        # would show a never-enabled bridge as ON. Log divergence instead.
+        if self.saved_snapshots:
+            off_ids = [
+                device_id
+                for device_id, state in data.items()
+                if state.get("lor") != LIVE_OVERRIDE_OFF
+            ]
+            if off_ids:
+                _LOGGER.info(
+                    "Bridge %s: %d synced device(s) report lor!=0 "
+                    "(possibly changed outside Home Assistant)",
+                    self.name,
+                    len(off_ids),
+                )
         return data
 
     async def async_load_saved_snapshot(self) -> None:
@@ -87,30 +118,41 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
             if isinstance(snapshot, dict) and self.devices:
                 self.saved_snapshots = {self.devices[0]["id"]: snapshot}
 
-        self.sync_enabled = bool(stored.get("sync_enabled", False))
+        self.sync_enabled = bool(self.saved_snapshots)
 
     async def async_set_sync_enabled(self, enabled: bool) -> None:
         """Enable or disable Hyperion realtime sync handling."""
-        if enabled:
-            await self._async_enable_sync()
-        else:
-            await self._async_disable_sync()
+        async with self._sync_lock:
+            if enabled:
+                await self._async_enable_sync()
+            else:
+                await self._async_disable_sync()
 
         await self.async_request_refresh()
 
     async def _async_enable_sync(self) -> None:
         """Allow all WLED members to accept Hyperion DDP realtime data."""
+        if self.sync_enabled and self.saved_snapshots:
+            _LOGGER.debug("Bridge %s already in sync; ensuring lor=0", self.name)
+            await self._async_post_all({"lor": LIVE_OVERRIDE_OFF})
+            return
         states = await self._async_read_all()
         self.saved_snapshots = {
             device["id"]: build_restorable_snapshot(state)
             for device, state in zip(self.devices, states, strict=True)
         }
         await self._async_save_snapshot(sync_enabled=True)
+        _LOGGER.debug(
+            "Bridge %s: snapshots saved for %d devices, enabling sync",
+            self.name,
+            len(self.saved_snapshots),
+        )
         await self._async_post_all({"lor": LIVE_OVERRIDE_OFF})
         self.sync_enabled = True
 
     async def _async_disable_sync(self) -> None:
         """Ignore realtime input and restore saved WLED state on all members."""
+        _LOGGER.debug("Bridge %s: disabling sync", self.name)
         errors = await self._async_post_all(
             {"lor": LIVE_OVERRIDE_UNTIL_REBOOT, "live": False},
             raise_on_error=False,
