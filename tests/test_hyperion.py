@@ -179,10 +179,11 @@ async def test_ensure_enables_only_when_off() -> None:
     server = FakeHyperionServer(led={0: True, 1: False})
     port = await server.start()
     try:
-        changed = await HyperionClient(host="127.0.0.1", port=port).async_ensure_led_enabled([0, 1])
+        states, changed = await HyperionClient(host="127.0.0.1", port=port).async_ensure_led_enabled([0, 1])
     finally:
         await server.stop()
 
+    assert states == {0: True, 1: True}
     assert changed == [1]
     writes = [r for r in server.requests if r.get("command") == "componentstate"]
     assert len(writes) == 1
@@ -195,8 +196,9 @@ async def test_ensure_writes_nothing_when_already_on(hyperion_server) -> None:
     """No write happens when LEDDEVICE is already on (stream reset bug)."""
     server, _ = hyperion_server
 
-    changed = await _client(hyperion_server).async_ensure_led_enabled([0])
+    states, changed = await _client(hyperion_server).async_ensure_led_enabled([0])
 
+    assert states == {0: True}
     assert changed == []
     assert [r for r in server.requests if r.get("command") == "componentstate"] == []
 

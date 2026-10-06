@@ -73,15 +73,19 @@ class FakeHyperion:
         targets = instances or sorted(self.led)
         return {idx: self.led[idx] for idx in targets}
 
-    async def async_ensure_led_enabled(self, instances: list[int]) -> list[int]:
+    async def async_ensure_led_enabled(
+        self, instances: list[int]
+    ) -> tuple[dict[int, bool], list[int]]:
         self.ensure_calls.append(list(instances))
         if self.error is not None:
             raise self.error
         targets = instances or sorted(self.led)
-        changed = [idx for idx in targets if not self.led.get(idx, False)]
+        states = {idx: self.led.get(idx, False) for idx in targets}
+        changed = [idx for idx in targets if not states[idx]]
         for idx in changed:
             self.led[idx] = True
-        return changed
+            states[idx] = True
+        return states, changed
 
 
 def _devices() -> list[dict[str, Any]]:
@@ -266,6 +270,9 @@ async def test_enable_ensures_hyperion_output() -> None:
     assert hyperion.led == {0: True}
     assert coord.hyperion_state["reachable"] is True
     assert coord.hyperion_state["led"] == {0: True}
+    # Single Hyperion session: only the trailing refresh re-reads.
+    assert len(hyperion.read_calls) == 1
+    assert getattr(coord, "listener_updates", 0) >= 1
 
 
 async def test_enable_fails_when_hyperion_down() -> None:
@@ -290,6 +297,9 @@ async def test_enable_fails_when_hyperion_down() -> None:
 
     assert coord.sync_enabled is False
     assert coord.hyperion_state["reachable"] is False
+    # WLED side was already applied before Hyperion failed.
+    assert clients[0].posts == [{"lor": 0}]
+    assert getattr(coord, "listener_updates", 0) >= 2
 
 
 async def test_poll_tracks_hyperion_but_survives_it() -> None:

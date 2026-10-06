@@ -120,22 +120,27 @@ class HyperionClient:
 
     async def async_ensure_led_enabled(
         self, instances: list[int]
-    ) -> list[int]:
+    ) -> tuple[dict[int, bool], list[int]]:
         """Enable LEDDEVICE output on targets that have it off.
 
-        Returns the instances that were changed. Never writes to instances
-        that already report LEDDEVICE on.
+        Returns the LED states per target and the instances that were
+        changed, so callers can update state without opening a second
+        session. Never writes to instances that already report LEDDEVICE on.
         """
         async with _HyperionSession(self) as session:
             targets = await session.async_resolve_targets(instances)
+            states: dict[int, bool] = {}
             changed: list[int] = []
             for target in targets:
                 await session.async_switch_to(target)
-                if await session.async_led_enabled():
+                enabled = await session.async_led_enabled()
+                states[target] = enabled
+                if enabled:
                     continue
                 await session.async_set_led_enabled(target, True)
+                states[target] = True
                 changed.append(target)
-            return changed
+            return states, changed
 
 
 class _HyperionSession:

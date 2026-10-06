@@ -188,8 +188,16 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
             len(self.saved_snapshots),
         )
         await self._async_post_all({"lor": LIVE_OVERRIDE_OFF})
-        await self._async_ensure_hyperion_output()
+        # Optimistic flip: WLED already reacts to lor, so update the switch
+        # now instead of making it wait for Hyperion + the final refresh.
         self.sync_enabled = True
+        self.async_update_listeners()
+        try:
+            await self._async_ensure_hyperion_output()
+        except HomeAssistantError:
+            self.sync_enabled = False
+            self.async_update_listeners()
+            raise
 
     async def _async_ensure_hyperion_output(self) -> None:
         """Enable Hyperion LEDDEVICE output on targets that have it off.
@@ -202,11 +210,20 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
             return
         targets = self._hyperion_targets()
         try:
-            changed = await self.hyperion.async_ensure_led_enabled(targets)
+            states, changed = await self.hyperion.async_ensure_led_enabled(targets)
         except HyperionAPIError as err:
-            await self._async_poll_hyperion()
+            self.hyperion_state = {
+                "configured": True,
+                "reachable": False,
+                "led": {},
+                "error": str(err),
+            }
             raise HomeAssistantError(f"Hyperion output could not be enabled: {err}") from err
-        await self._async_poll_hyperion()
+        self.hyperion_state = {
+            "configured": True,
+            "reachable": True,
+            "led": states,
+        }
         if changed:
             _LOGGER.debug(
                 "Bridge %s: enabled Hyperion LED output on instances %s",
@@ -251,6 +268,9 @@ class WLEDHyperionBridgeCoordinator(DataUpdateCoordinator[dict[str, dict[str, An
         self.sync_enabled = False
         self.saved_snapshots = {}
         await self.store.async_remove()
+        # Optimistic flip: WLED already restored, update the switch now
+        # instead of making it wait for the final refresh.
+        self.async_update_listeners()
 
     async def _async_save_snapshot(self, sync_enabled: bool) -> None:
         """Persist the current saved snapshots."""

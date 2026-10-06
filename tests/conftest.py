@@ -139,6 +139,9 @@ def _install() -> None:
         async def async_config_entry_first_refresh(self):
             await self.async_request_refresh()
 
+        def async_update_listeners(self):
+            self.listener_updates = getattr(self, "listener_updates", 0) + 1
+
     class CoordinatorEntity:
         def __class_getitem__(cls, item):
             return cls
